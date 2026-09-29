@@ -56,6 +56,7 @@ _METADATA_KEYS = [
     "tf_class",
     "tf_family",
     "species",
+    "species_name",
     "tax_group",
     "acc",
     "data_type",
