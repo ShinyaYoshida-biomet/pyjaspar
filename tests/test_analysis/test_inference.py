@@ -8,8 +8,10 @@ import urllib.error
 import urllib.request
 
 import pytest
+from click.testing import CliRunner
 
 from pyjaspar.analysis.inference import INFER_HOSTS, InferenceHit, infer_profiles
+from pyjaspar.cli.main import cli
 
 RESPONSE = {
     "count": 2,
@@ -100,3 +102,52 @@ def test_infer_profiles_invalid_sequence(fake_api, sequence):
     with pytest.raises(ValueError, match="amino acid"):
         infer_profiles(sequence)
     assert fake_api.urls == []
+
+
+# --- CLI tests ---
+
+
+def test_infer_cli_tsv(fake_api):
+    result = CliRunner().invoke(cli, ["infer", "MKLAA"])
+    assert result.exit_code == 0
+    assert "query\trelease\tmatrix_id\tname\tevalue\tdbd_identity" in result.output
+    assert "MA0162.2" in result.output
+    assert "JASPAR2024" in result.output
+
+
+def test_infer_cli_json(fake_api):
+    result = CliRunner().invoke(cli, ["infer", "MKLAA", "--format", "json"])
+    assert result.exit_code == 0
+    data = json.loads(result.output[result.output.index("{") :])
+    assert data["count"] == 2
+    assert data["results"][0]["matrix_id"] == "MA0162.2"
+    assert data["results"][0]["release"] == "JASPAR2024"
+
+
+def test_infer_cli_fasta_queries_each_record(fake_api, tmp_path):
+    fasta = tmp_path / "p.fa"
+    fasta.write_text(">a\nMKLAA\n>b\nGGHHK\n")
+    result = CliRunner().invoke(cli, ["infer", str(fasta)])
+    assert result.exit_code == 0
+    assert len(fake_api.urls) == 2
+
+
+def test_infer_cli_release_without_service(fake_api):
+    result = CliRunner().invoke(cli, ["infer", "MKLAA", "-r", "2026"])
+    assert result.exit_code == 1
+    assert fake_api.urls == []
+
+
+def test_infer_cli_server_unreachable(monkeypatch):
+    def urlopen(url, timeout=None):
+        raise urllib.error.URLError("no route")
+
+    monkeypatch.setattr(urllib.request, "urlopen", urlopen)
+    result = CliRunner().invoke(cli, ["infer", "MKLAA"])
+    assert result.exit_code == 1
+
+
+def test_infer_cli_long_literal_sequence(fake_api):
+    result = CliRunner().invoke(cli, ["infer", "M" * 600])
+    assert result.exit_code == 0
+    assert len(fake_api.urls) == 1

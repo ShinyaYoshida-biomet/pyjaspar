@@ -139,6 +139,32 @@ pyjaspar enrichment \
     --format json
 ```
 
+### infer
+
+Predict which JASPAR profiles a protein binds, from its amino acid sequence
+(full length or just the DNA-binding domain) or a FASTA file. The search runs
+on a JASPAR server, so it needs network access and takes several seconds per
+sequence.
+
+```bash
+# Literal protein sequence
+pyjaspar infer MAAAKAEMQLMSPLQISDPFGSFPHSPTMDNYPKLEEMMLLSNGAPQF...
+
+# FASTA file, one search per record
+pyjaspar infer proteins.fasta
+
+# JSON output
+pyjaspar infer proteins.fasta --format json
+```
+
+Only some releases have an inference service (2024, 2022 and 2020; 2024 is
+the default). The matrix IDs in the output belong to the release named in the
+`release` column, so fetch them from that release:
+
+```bash
+pyjaspar motif-by-id MA0162.2 -r 2024
+```
+
 ## Visualization commands
 
 ### logo

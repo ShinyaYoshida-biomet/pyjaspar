@@ -25,6 +25,7 @@ _SIMILARITY_BEST_TSV_KEYS = [
     "best_offset",
     "is_reverse_complement",
 ]
+_INFER_TSV_KEYS = ["query", "release", "matrix_id", "name", "evalue", "dbd_identity"]
 _ENRICHMENT_TSV_KEYS = [
     "motif_id",
     "motif_name",
@@ -437,3 +438,53 @@ def enrichment(
         _print_output(data, "json")
     else:
         _print_output(rows, "tsv", _ENRICHMENT_TSV_KEYS)
+
+
+@click.command("infer")
+@click.argument("sequence")
+@click.option(
+    "-r",
+    "--release",
+    default="2024",
+    show_default=True,
+    help="JASPAR release year with an inference service (2024, 2022 or 2020)",
+)
+@click.option(
+    "--format",
+    "fmt",
+    default="tsv",
+    show_default=True,
+    type=click.Choice(["json", "tsv"], case_sensitive=False),
+    help="Output format",
+)
+def infer(sequence: str, release: str, fmt: str) -> None:
+    """Predict which JASPAR profiles a protein binds.
+
+    SEQUENCE is an amino acid sequence or a FASTA file. The search runs on a
+    JASPAR server, so it needs network access and takes several seconds per
+    sequence.
+    """
+    _require_analysis()
+    from dataclasses import asdict
+
+    from pyjaspar.analysis import infer_profiles
+
+    queries = _read_fasta(sequence) if _is_fasta_file(sequence) else [("input", sequence)]
+
+    rows: list[dict[str, Any]] = []
+    for query_id, protein in queries:
+        click.echo(f"Searching JASPAR{release} for {query_id} ...", err=True)
+        try:
+            hits = infer_profiles(protein, release=f"JASPAR{release}")
+        except ValueError as e:
+            click.echo(click.style(str(e), fg="red"), err=True)
+            sys.exit(1)
+        except OSError as e:
+            click.echo(click.style(f"Could not reach the JASPAR server: {e}", fg="red"), err=True)
+            sys.exit(1)
+        rows.extend({"query": query_id, **asdict(hit)} for hit in hits)
+
+    if fmt == "json":
+        _print_output({"count": len(rows), "results": rows}, "json")
+    else:
+        _print_output(rows, "tsv", _INFER_TSV_KEYS)
