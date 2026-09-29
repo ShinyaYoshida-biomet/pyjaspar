@@ -447,7 +447,7 @@ def enrichment(
     "--release",
     default="2024",
     show_default=True,
-    help="JASPAR release year with an inference service (2024, 2022 or 2020)",
+    help="JASPAR release year to search",
 )
 @click.option(
     "--format",

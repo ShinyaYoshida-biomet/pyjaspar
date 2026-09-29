@@ -157,9 +157,9 @@ pyjaspar infer proteins.fasta
 pyjaspar infer proteins.fasta --format json
 ```
 
-Only some releases have an inference service (2024, 2022 and 2020; 2024 is
-the default). The matrix IDs in the output belong to the release named in the
-`release` column, so fetch them from that release:
+`JASPAR2024` is searched by default; use `-r` to search another release. The
+matrix IDs in the output belong to the release named in the `release` column,
+so fetch them from that release:
 
 ```bash
 pyjaspar motif-by-id MA0162.2 -r 2024
