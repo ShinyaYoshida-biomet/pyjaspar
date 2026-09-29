@@ -136,6 +136,8 @@ def test_infer_cli_release_without_service(fake_api):
     result = CliRunner().invoke(cli, ["infer", "MKLAA", "-r", "2026"])
     assert result.exit_code == 1
     assert fake_api.urls == []
+    assert "Searching" not in result.output
+    assert "2024" in result.output
 
 
 def test_infer_cli_server_unreachable(monkeypatch):

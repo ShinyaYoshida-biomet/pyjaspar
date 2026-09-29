@@ -468,6 +468,18 @@ def infer(sequence: str, release: str, fmt: str) -> None:
     from dataclasses import asdict
 
     from pyjaspar.analysis import infer_profiles
+    from pyjaspar.analysis.inference import INFER_HOSTS
+
+    if f"JASPAR{release}" not in INFER_HOSTS:
+        click.echo(
+            click.style(
+                f"Inference is not available for JASPAR{release}; "
+                f"use one of {[r.replace('JASPAR', '') for r in INFER_HOSTS]}",
+                fg="red",
+            ),
+            err=True,
+        )
+        sys.exit(1)
 
     queries = _read_fasta(sequence) if _is_fasta_file(sequence) else [("input", sequence)]
 
