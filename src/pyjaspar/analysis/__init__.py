@@ -5,6 +5,7 @@ Requires the ``analysis`` extra: ``pip install pyjaspar[analysis]``
 
 from .alignment import AlignmentResult, align_motifs
 from .enrichment import EnrichmentResult, motif_enrichment
+from .inference import InferenceHit, infer_profiles
 from .scanning import ScanHit, scan_sequence
 from .similarity import (
     best_correlation,
@@ -24,4 +25,6 @@ __all__ = [
     "motif_enrichment",
     "AlignmentResult",
     "align_motifs",
+    "InferenceHit",
+    "infer_profiles",
 ]
