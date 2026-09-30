@@ -8,6 +8,8 @@ taxonomic group vertebrates, latest versions).
 
 from __future__ import annotations
 
+import random
+
 import pytest
 from Bio.motifs.jaspar import Motif
 
@@ -28,6 +30,12 @@ def egr1(jdb):
 @pytest.fixture(scope="module")
 def ctcf(jdb):
     return jdb.fetch_motif_by_id("MA0139.2")
+
+
+@pytest.fixture(scope="module")
+def core_vertebrates(jdb):
+    """The profiles the web form searched: CORE, vertebrates, latest versions."""
+    return jdb.fetch_motifs(collection=["CORE"], tax_group=["Vertebrates"], all_versions=False)
 
 
 def with_flat_columns(motif, position, how_many):
@@ -156,20 +164,92 @@ def test_search_returns_hits_best_first(jdb, ctcf):
     assert hits[0].width == 15
 
 
-def test_search_relative_score_is_per_pair(jdb, ctcf):
-    # CTCF MA1929.2 is 31 columns wide: 100 * score / (2 * min(15, 31))
-    (hit,) = search_profiles(ctcf, [jdb.fetch_motif_by_id("MA1929.2")])
-    assert hit.width == 31
-    assert hit.relative_score == pytest.approx(100 * hit.score / (2 * 15))
+@pytest.mark.parametrize(
+    ("matrix_id", "web_percent"),
+    [
+        # JASPAR web tool "Percent Score", query = human EGR1 MA0162.2
+        ("MA0002.3", 72.79055555555556),  # first row of the web table: m = 9
+        ("MA0003.5", 74.37611111111111),
+        ("MA0004.1", 72.05175),  # m = 6
+        ("MA0006.2", 86.7515),  # m = 5
+        ("MA0007.4", 172.406),  # above 100: m is still 5
+        ("MA1723.2", 246.72599999999997),
+        ("MA2557.1", 72.544375),  # width 4: m = 4 from here on
+        ("MA2558.1", 144.775),
+        ("MA2587.1", 271.37375000000003),
+        ("MA0162.5", 189.82099999999997),
+    ],
+)
+def test_percent_score_matches_web_tool_for_egr1_query(
+    core_vertebrates, egr1, matrix_id, web_percent
+):
+    hits = {h.matrix_id: h for h in search_profiles(egr1, core_vertebrates)}
+    assert hits[matrix_id].percent_score == pytest.approx(web_percent, abs=1e-2)
 
 
-def test_search_sort_by_relative_score(jdb, egr1):
-    candidates = [jdb.fetch_motif_by_id(i) for i in ("MA0006.2", "MA1723.2", "MA0162.5")]
-    by_score = search_profiles(egr1, candidates)
-    by_relative = search_profiles(egr1, candidates, sort_by="relative_score")
+@pytest.mark.parametrize(
+    ("matrix_id", "web_percent"),
+    [
+        # JASPAR web tool "Percent Score", query = CTCF MA0139.2
+        ("MA0139.2", 300.0),
+        ("MA1930.2", 298.88),
+        ("MA0002.3", 70.58),
+        ("MA2557.1", 69.513125),
+    ],
+)
+def test_percent_score_matches_web_tool_for_ctcf_query(
+    core_vertebrates, ctcf, matrix_id, web_percent
+):
+    hits = {h.matrix_id: h for h in search_profiles(ctcf, core_vertebrates)}
+    assert hits[matrix_id].percent_score == pytest.approx(web_percent, abs=1e-2)
+
+
+@pytest.mark.parametrize(
+    ("matrix_id", "web_percent"),
+    [
+        # JASPAR web tool "Percent Score", query = CTCF MA0139.2 with two flat columns inserted
+        ("MA0139.2", 269.9),
+        ("MA1930.2", 289.098),
+        ("MA0002.3", 75.495),
+        ("MA2557.1", 76.967625),
+    ],
+)
+def test_percent_score_matches_web_tool_for_inserted_columns_query(
+    core_vertebrates, ctcf, matrix_id, web_percent
+):
+    query = with_flat_columns(ctcf, position=7, how_many=2)
+    hits = {h.matrix_id: h for h in search_profiles(query, core_vertebrates)}
+    assert hits[matrix_id].percent_score == pytest.approx(web_percent, abs=1e-2)
+
+
+def test_percent_score_does_not_depend_on_the_order_of_the_candidates(core_vertebrates, egr1):
+    shuffled = list(core_vertebrates)
+    random.Random(0).shuffle(shuffled)
+    expected = {h.matrix_id: h.percent_score for h in search_profiles(egr1, core_vertebrates)}
+    actual = {h.matrix_id: h.percent_score for h in search_profiles(egr1, shuffled)}
+    assert actual == pytest.approx(expected)
+
+
+def test_percent_score_follows_the_given_order_without_standard_ids(ctcf):
+    # matrix_id "" is not a JASPAR ID, so the candidates are taken in the order given
+    wide = with_flat_columns(ctcf, 7, 2)  # 17 columns
+    narrow = Motif(
+        matrix_id="",
+        name="narrow",
+        counts={b: list(ctcf.counts[b])[:10] for b in "ACGT"},
+    )
+    hits = {h.name: h for h in search_profiles(ctcf, [wide, narrow])}
+    # m = min(15, 17) = 15 for the first candidate, then min(15, 10) = 10 for the second
+    assert hits["flat"].percent_score == pytest.approx(100 * hits["flat"].score / (2 * 15))
+    assert hits["narrow"].percent_score == pytest.approx(100 * hits["narrow"].score / (2 * 10))
+
+
+def test_search_sort_by_percent_score(core_vertebrates, egr1):
+    by_score = search_profiles(egr1, core_vertebrates)
+    by_percent = search_profiles(egr1, core_vertebrates, sort_by="percent_score")
     assert [h.score for h in by_score] == sorted((h.score for h in by_score), reverse=True)
-    assert [h.relative_score for h in by_relative] == sorted(
-        (h.relative_score for h in by_relative), reverse=True
+    assert [h.percent_score for h in by_percent] == sorted(
+        (h.percent_score for h in by_percent), reverse=True
     )
 
 

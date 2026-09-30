@@ -9,6 +9,7 @@ TFBS::Matrix::Alignment; the default gap penalties are the documented ones).
 
 from __future__ import annotations
 
+import re
 from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
@@ -24,6 +25,7 @@ if TYPE_CHECKING:
     from Bio.motifs.jaspar import Motif
 
 _BASES = "ACGT"
+_MATRIX_ID = re.compile(r"[A-Z]+(\d+)\.(\d+)")
 
 
 @dataclass(frozen=True)
@@ -53,11 +55,12 @@ class ProfileHit:
         score: Alignment score; this is the "Score" column of the JASPAR web
             tool. It is a sum over columns, so it tends to be higher for longer
             profiles.
-        relative_score: ``100 * score / (2 * min(query width, candidate width))``,
-            computed per pair. It is not the web tool's "Percent Score" column,
-            which divides by the narrowest profile seen so far in the table and
-            so depends on the order of the results. It tends to favor short
-            profiles.
+        percent_score: The "Percent Score" column of the JASPAR web tool,
+            ``100 * score / (2 * m)``, where ``m`` is the narrowest profile seen
+            so far. ``m`` starts at the query's width and is lowered by each
+            candidate in matrix-ID order (the order of the web tool's table),
+            and never raised again. The value therefore depends on the set of
+            candidates, and it can exceed 100.
         is_reverse_complement: True if the candidate's reverse complement
             aligned better.
         gaps: Number of internal gap runs in the best alignment (0 or 1).
@@ -67,7 +70,7 @@ class ProfileHit:
     matrix_id: str
     name: str
     score: float
-    relative_score: float
+    percent_score: float
     is_reverse_complement: bool
     gaps: int
     width: int
@@ -161,6 +164,17 @@ def align_score(
     return AlignScore(forward, False, forward_gaps)
 
 
+def _matrix_id_order(candidates: list[Motif]) -> list[int]:
+    """Indices of the candidates in matrix-ID order, or as given if an ID is not standard."""
+    keys = []
+    for candidate in candidates:
+        match = _MATRIX_ID.fullmatch(candidate.matrix_id or "")
+        if match is None:
+            return list(range(len(candidates)))
+        keys.append((int(match.group(1)), int(match.group(2))))
+    return sorted(range(len(candidates)), key=keys.__getitem__)
+
+
 def search_profiles(
     query: Motif,
     candidates: Iterable[Motif],
@@ -180,8 +194,7 @@ def search_profiles(
         candidates: Profiles to compare the query with.
         open_penalty: Penalty for the first column of a gap.
         ext_penalty: Penalty for each further column of the same gap.
-        sort_by: ``"score"`` (as in the web tool) or ``"relative_score"``;
-            best first.
+        sort_by: ``"score"`` or ``"percent_score"``; best first.
         top: Return only this many hits; all of them if None.
 
     Returns:
@@ -191,24 +204,31 @@ def search_profiles(
         ValueError: If ``sort_by`` is unknown or a profile has a column with
             no counts.
     """
-    if sort_by not in ("score", "relative_score"):
-        raise ValueError("sort_by must be 'score' or 'relative_score'")
+    if sort_by not in ("score", "percent_score"):
+        raise ValueError("sort_by must be 'score' or 'percent_score'")
 
-    query_width = query.length
-    hits = []
-    for candidate in candidates:
-        result = align_score(query, candidate, open_penalty, ext_penalty)
-        hits.append(
-            ProfileHit(
-                matrix_id=candidate.matrix_id,
-                name=candidate.name,
-                score=result.score,
-                relative_score=100 * result.score / (2 * min(query_width, candidate.length)),
-                is_reverse_complement=result.is_reverse_complement,
-                gaps=result.gaps,
-                width=candidate.length,
-            )
+    candidates = list(candidates)
+    results = [align_score(query, c, open_penalty, ext_penalty) for c in candidates]
+
+    # The web tool divides by the narrowest profile seen so far, going through
+    # its table in matrix-ID order; see ProfileHit.percent_score.
+    narrowest = query.length
+    percent = {}
+    for i in _matrix_id_order(candidates):
+        narrowest = min(narrowest, candidates[i].length)
+        percent[i] = 100 * results[i].score / (2 * narrowest)
+
+    hits = [
+        ProfileHit(
+            matrix_id=c.matrix_id,
+            name=c.name,
+            score=r.score,
+            percent_score=percent[i],
+            is_reverse_complement=r.is_reverse_complement,
+            gaps=r.gaps,
+            width=c.length,
         )
-
+        for i, (c, r) in enumerate(zip(candidates, results, strict=True))
+    ]
     hits.sort(key=lambda h: (-getattr(h, sort_by), h.matrix_id))
     return hits if top is None else hits[:top]

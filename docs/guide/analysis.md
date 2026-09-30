@@ -64,11 +64,11 @@ end for free and may contain one internal gap (`open_penalty=3.0` for its first
 column, `ext_penalty=0.01` for each further column); both the candidate and its
 reverse complement are tried.
 
-`relative_score` is `100 * score / (2 * min(query width, candidate width))`,
-computed for each pair; it favors short profiles. It is not the web tool's
-"Percent Score" column, which divides by the narrowest profile seen so far in the
-table and so depends on the order of the results. Use `sort_by="relative_score"`
-to rank by it.
+`percent_score` reproduces the web tool's "Percent Score" column: `100 * score / (2 * m)`,
+where `m` is the narrowest profile seen so far. `m` starts at the query's width and is
+lowered by each candidate in matrix-ID order, the order of the web tool's table, and is
+never raised again. The value therefore depends on the set of candidates, not only on the
+pair, and it can exceed 100. Use `sort_by="percent_score"` to rank by it.
 
 The method is a semi-global variant of the Needleman-Wunsch algorithm that permits
 one internal gap, as documented for
@@ -82,7 +82,7 @@ one internal gap, as documented for
 | `matrix_id` | str | JASPAR matrix ID of the candidate |
 | `name` | str | Name of the TF the candidate belongs to |
 | `score` | float | Alignment score (the web tool's "Score") |
-| `relative_score` | float | `100 * score / (2 * min(query width, candidate width))` |
+| `percent_score` | float | The web tool's "Percent Score" (depends on the set of candidates, see above) |
 | `is_reverse_complement` | bool | The candidate's reverse complement aligned better |
 | `gaps` | int | Internal gap runs in the best alignment (0 or 1) |
 | `width` | int | Number of columns of the candidate |
