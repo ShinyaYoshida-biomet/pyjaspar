@@ -4,8 +4,8 @@ Requires the ``analysis`` extra: ``pip install pyjaspar[analysis]``
 """
 
 from .enrichment import EnrichmentResult, motif_enrichment
-from .profile_search import AlignScore, ProfileHit, align_score, search_profiles
 from .scanning import ScanHit, scan_sequence
+from .search import AlignScore, ProfileHit, align_score, search_profiles
 from .similarity import (
     best_correlation,
     euclidean_distance,
