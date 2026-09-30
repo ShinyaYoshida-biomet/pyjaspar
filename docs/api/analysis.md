@@ -9,7 +9,7 @@
 
 ## Profile search
 
-::: pyjaspar.analysis.search
+::: pyjaspar.analysis.matrix_align
     options:
       show_source: true
       members_order: source

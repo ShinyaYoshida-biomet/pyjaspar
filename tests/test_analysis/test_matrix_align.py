@@ -12,7 +12,7 @@ import pytest
 from Bio.motifs.jaspar import Motif
 
 from pyjaspar import JasparDB
-from pyjaspar.analysis.search import ProfileHit, align_score, search_profiles
+from pyjaspar.analysis.matrix_align import ProfileHit, align_score, search_profiles
 
 
 @pytest.fixture(scope="module")
