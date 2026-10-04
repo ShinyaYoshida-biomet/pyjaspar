@@ -38,6 +38,7 @@ viz = [
     "logomaker>=0.8",
     "matplotlib>=3.7",
     "pandas>=1.5",
+]
 meme = [
     "memelite>=0.5",
 ]
