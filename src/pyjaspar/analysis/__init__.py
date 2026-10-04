@@ -7,6 +7,7 @@ from .alignment import AlignmentResult, align_motifs
 from .enrichment import EnrichmentResult, motif_enrichment
 from .inference import InferenceHit, infer_profiles
 from .matrix_align import AlignScore, ProfileHit, align_score, search_profiles
+from .meme import TomtomHit, tomtom
 from .scanning import ScanHit, scan_sequence
 from .similarity import (
     best_correlation,
@@ -32,4 +33,6 @@ __all__ = [
     "motif_enrichment",
     "AlignmentResult",
     "align_motifs",
+    "TomtomHit",
+    "tomtom",
 ]

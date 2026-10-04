@@ -179,6 +179,45 @@ print(f"score={result.score:.4f} offset={result.offset} "
 | `offset` | int | Position offset of motif2 relative to motif1 |
 | `is_reverse_complement` | bool | Whether motif2 was reverse-complemented |
 | `alignment` | `Bio.Align.Alignment` | The rendered alignment (`str()` gives the target/query display) |
+## Motif comparison with p-values
+
+`tomtom()` ranks candidate profiles by how significant their similarity to a query motif is,
+using the Tomtom algorithm of the MEME suite as implemented by
+[memesuite-lite](https://github.com/jmschrei/memesuite-lite). memesuite-lite is not installed
+with pyjaspar; install it with `pip install pyjaspar[meme]`.
+
+```python
+from pyjaspar import JasparDB
+from pyjaspar.analysis import tomtom
+
+jdb = JasparDB()
+query = jdb.fetch_motif_by_id("MA0139.2")  # CTCF
+
+candidates = jdb.fetch_motifs(
+    collection=["CORE"], tax_group=["Vertebrates"], all_versions=False
+)
+for hit in tomtom(query, candidates, top=3):
+    print(f"{hit.matrix_id}  {hit.name:<8}  p={hit.pvalue:.1e}  offset={hit.offset}")
+# MA0139.2  CTCF      p=5.9e-49  offset=0
+# MA1930.2  CTCF      p=8.5e-22  offset=-18
+# MA1929.2  CTCF      p=1.2e-14  offset=-17
+```
+
+The p-values are computed against a background made of the columns of the candidates, so they
+depend on which candidates are given. Use a large set, such as a whole collection;
+memesuite-lite warns below 25 candidates. The first call on a machine compiles code and takes
+about half a minute; the compiled code is cached, so later calls take about a second.
+
+### TomtomHit fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `matrix_id` | str | JASPAR matrix ID of the candidate |
+| `name` | str | Name of the TF the candidate belongs to |
+| `pvalue` | float | p-value of the best alignment between the query and the candidate |
+| `offset` | int | Position in the query minus position in the candidate at the first aligned column, in the orientation of the candidate that was aligned (the sign of `best_correlation`'s offset) |
+| `overlap` | int | Number of columns that the query and the candidate share |
+| `is_reverse_complement` | bool | The candidate's reverse complement aligned better |
 
 ## Enrichment analysis
 
