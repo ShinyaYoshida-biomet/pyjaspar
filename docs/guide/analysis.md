@@ -33,6 +33,68 @@ for hit in hits:
 | `score` | float | PSSM score |
 | `sequence` | str | Matched subsequence |
 
+## Profile search
+
+`search_profiles()` scores a query motif against a set of profiles and ranks them.
+Build the set with `fetch_motifs`, which has the same filters as the web form of the
+**Matrix Align** tool on the JASPAR web site (collection, taxonomic group, latest or
+all versions).
+
+```python
+from pyjaspar import JasparDB
+from pyjaspar.analysis import search_profiles
+
+jdb = JasparDB()
+query = jdb.fetch_motif_by_id("MA0139.2")  # CTCF
+
+candidates = jdb.fetch_motifs(
+    collection=["CORE"], tax_group=["Vertebrates"], all_versions=False
+)
+for hit in search_profiles(query, candidates, top=3):
+    print(f"{hit.matrix_id}  {hit.name:<8}  score={hit.score:.4f}")
+# MA0139.2  CTCF      score=30.0000
+# MA1930.2  CTCF      score=29.8880
+# MA1929.2  CTCF      score=27.8202
+```
+
+### Scoring
+
+The scoring implemented here is the one of the Matrix Align web tool. `score` is its
+"Score" column. Every aligned column contributes between
+0 and 2, so a profile aligned with itself scores twice its width, and a longer
+profile tends to score higher. The alignment may leave columns hanging off either
+end for free and may contain one internal gap (`open_penalty=3.0` for its first
+column, `ext_penalty=0.01` for each further column); both the candidate and its
+reverse complement are tried, and the reverse complement is reported when both
+score the same.
+
+`percent_score` reproduces the web tool's "Percent Score" column: `100 * score / (2 * m)`,
+where `m` is the narrowest profile seen so far. `m` starts at the query's width and is
+lowered by each candidate in matrix-ID order, the order of the web tool's table, and is
+never raised again. The value therefore depends on the set of candidates, not only on the
+pair, and it can exceed 100. Use `sort_by="percent_score"` to rank by it.
+
+The alignment is a semi-global variant of the Needleman-Wunsch algorithm that permits
+one internal gap, as implemented by the `matrix_aligner` program that the web tool runs
+(Sandelin et al., [Funct Integr Genomics 3:125-134, 2003](https://doi.org/10.1007/s10142-003-0086-6);
+source in the [`jaspar_tools`](https://bitbucket.org/CBGR/jaspar_tools) repository). The
+implementation here is independent; `gaps`, `offset` and `alignment_length` follow what that
+program reports.
+
+### ProfileHit fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `matrix_id` | str | JASPAR matrix ID of the candidate |
+| `name` | str | Name of the TF the candidate belongs to |
+| `score` | float | Alignment score (the web tool's "Score") |
+| `percent_score` | float | The web tool's "Percent Score" (depends on the set of candidates, see above) |
+| `is_reverse_complement` | bool | The candidate's reverse complement aligned better |
+| `gaps` | int | Gap columns in the best alignment (0 if it has no gap); the gap is one run of that many columns |
+| `width` | int | Number of columns of the candidate |
+| `offset` | int | Position in the query minus position in the candidate at the first pair of aligned columns (from 1, in the orientation of the candidate that was aligned) |
+| `alignment_length` | int | Columns of the alignment, gap columns included and the free overhangs excluded |
+
 ## Motif similarity
 
 Compare two motifs using column-wise metrics.
