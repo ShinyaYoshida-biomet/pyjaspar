@@ -3,9 +3,47 @@
 from __future__ import annotations
 
 import pytest
+from Bio.motifs.jaspar import Motif
+from Bio.Seq import Seq
 
 from pyjaspar import JasparDB
 from pyjaspar.analysis.scanning import ScanHit, scan_sequence
+
+
+@pytest.fixture
+def acg_motif():
+    return Motif(
+        matrix_id="TEST",
+        name="ACG",
+        counts={base: [10 if letter == base else 0 for letter in "ACG"] for base in "ACGT"},
+    )
+
+
+@pytest.mark.parametrize("sequence", ["CGTAAAAAAA", "AAAACGTAAA", "AAAAAAACGT"])
+def test_reverse_hit_uses_original_sequence_coordinates(acg_motif, sequence):
+    hits = scan_sequence(sequence, acg_motif, threshold=0.99)
+    reverse_hits = [hit for hit in hits if hit.strand == "-"]
+    assert len(reverse_hits) == 1
+    hit = reverse_hits[0]
+    assert hit.position == sequence.index("CGT")
+    assert hit.sequence == "CGT"
+    assert hit.sequence == sequence[hit.position : hit.position + acg_motif.length]
+    pssm = acg_motif.counts.normalize(0.001).log_odds()
+    assert hit.score == pytest.approx(pssm.calculate(Seq(hit.sequence).reverse_complement()))
+
+
+def test_mixed_strand_hits_are_sorted_in_original_coordinates(acg_motif):
+    sequence = "AAAACGTAAA"
+    hits = scan_sequence(sequence, acg_motif, threshold=0.99)
+    assert [(hit.position, hit.strand, hit.sequence) for hit in hits] == [
+        (3, "+", "ACG"),
+        (4, "-", "CGT"),
+    ]
+    assert scan_sequence(sequence, acg_motif, threshold=0.99, both_strands=False) == hits[:1]
+
+
+def test_reverse_only_site_is_excluded_when_both_strands_is_false(acg_motif):
+    assert scan_sequence("CGTAAAAAAA", acg_motif, threshold=0.99, both_strands=False) == []
 
 
 @pytest.fixture(scope="module")
