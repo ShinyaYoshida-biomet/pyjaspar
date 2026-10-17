@@ -25,6 +25,9 @@ def test_analysis_commands_in_help():
     assert "similarity" in result.output
     assert "align" in result.output
     assert "enrichment" in result.output
+    assert "search" in result.output
+    assert "infer" in result.output
+    assert "logo" in result.output
 
 
 # --- scan tests ---
@@ -207,6 +210,93 @@ def test_align_json():
 
 def test_align_invalid_motif():
     result = CliRunner().invoke(cli, ["align", "MA9999.1", "MA0002.1"])
+    assert result.exit_code == 1
+
+
+# --- search tests ---
+
+
+def test_search_tsv_lists_the_top_hits():
+    result = CliRunner().invoke(
+        cli, ["search", "MA0139.1", "--tax-group", "Vertebrates", "--top", "3"]
+    )
+    assert result.exit_code == 0
+    lines = result.output.strip().splitlines()
+    assert lines[0].split("\t") == [
+        "rank",
+        "matrix_id",
+        "name",
+        "score",
+        "offset",
+        "overlap",
+        "gaps",
+        "is_reverse_complement",
+    ]
+    assert len(lines) == 4
+    assert [line.split("\t")[2] for line in lines[1:]] == ["CTCF", "CTCF", "CTCF"]
+
+
+def test_search_json_pearson():
+    result = CliRunner().invoke(
+        cli,
+        [
+            "search",
+            "MA0139.1",
+            "--tax-group",
+            "Vertebrates",
+            "--method",
+            "pearson",
+            "--top",
+            "2",
+            "--format",
+            "json",
+        ],
+    )
+    assert result.exit_code == 0
+    data = json.loads(result.output)
+    assert data["method"] == "pearson"
+    assert data["count"] == 2
+    assert data["results"][0]["percent_score"] is None
+
+
+def test_search_invalid_motif():
+    result = CliRunner().invoke(cli, ["search", "MA9999.1"])
+    assert result.exit_code == 1
+
+
+# --- infer tests ---
+
+
+def test_infer_tsv(monkeypatch):
+    from pyjaspar.analysis import InferenceHit
+
+    def fake_infer(sequence, release):
+        return [InferenceHit("MA0162.2", "EGR1", 1.9e-63, 0.942, "logo.svg", release)]
+
+    monkeypatch.setattr("pyjaspar.analysis.infer_profiles", fake_infer)
+    result = CliRunner().invoke(cli, ["infer", "MSNEQ"])
+    assert result.exit_code == 0
+    assert "input\tJASPAR2024\tMA0162.2\tEGR1" in result.output
+
+
+def test_infer_unavailable_release():
+    result = CliRunner().invoke(cli, ["infer", "MSNEQ", "--release", "2026"])
+    assert result.exit_code == 1
+    assert "not available" in result.output
+
+
+# --- logo tests ---
+
+
+def test_logo_writes_an_image(tmp_path):
+    out = tmp_path / "ctcf.png"
+    result = CliRunner().invoke(cli, ["logo", "MA0139.1", "-o", str(out)])
+    assert result.exit_code == 0
+    assert out.stat().st_size > 0
+
+
+def test_logo_invalid_motif(tmp_path):
+    result = CliRunner().invoke(cli, ["logo", "MA9999.1", "-o", str(tmp_path / "x.png")])
     assert result.exit_code == 1
 
 

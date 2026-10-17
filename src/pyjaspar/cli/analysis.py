@@ -25,6 +25,17 @@ _SIMILARITY_BEST_TSV_KEYS = [
     "best_offset",
     "is_reverse_complement",
 ]
+_SEARCH_TSV_KEYS = [
+    "rank",
+    "matrix_id",
+    "name",
+    "score",
+    "offset",
+    "overlap",
+    "gaps",
+    "is_reverse_complement",
+]
+_INFER_TSV_KEYS = ["query", "release", "matrix_id", "name", "evalue", "dbd_identity"]
 _ENRICHMENT_TSV_KEYS = [
     "motif_id",
     "motif_name",
@@ -36,6 +47,21 @@ _ENRICHMENT_TSV_KEYS = [
     "pvalue",
     "qvalue",
 ]
+
+
+_METHOD_OPTION = click.option(
+    "--method",
+    default="matrix_align",
+    show_default=True,
+    type=click.Choice(["matrix_align", "pearson"], case_sensitive=False),
+    help="Comparison method: Matrix Align (as on the JASPAR website) or Pearson correlation",
+)
+_MIN_OVERLAP_OPTION = click.option(
+    "--min-overlap",
+    default=None,
+    type=int,
+    help="Pearson only: minimum overlapping columns  [default: 4]",
+)
 
 
 def _print_output(data: Any, fmt: str, tsv_keys: list[str] | None = None) -> None:
@@ -273,13 +299,8 @@ def similarity(
     type=click.Choice(_RELEASE_YEARS, case_sensitive=False),
     help="JASPAR release year",
 )
-@click.option(
-    "--min-overlap",
-    default=4,
-    show_default=True,
-    type=int,
-    help="Minimum overlapping columns required",
-)
+@_METHOD_OPTION
+@_MIN_OVERLAP_OPTION
 @click.option(
     "--no-reverse-complement",
     is_flag=True,
@@ -298,14 +319,16 @@ def align(
     id1: str,
     id2: str,
     release: str,
-    min_overlap: int,
+    method: str,
+    min_overlap: int | None,
     no_reverse_complement: bool,
     fmt: str,
 ) -> None:
     """Align two motifs and show the aligned view.
 
-    Finds the best offset and orientation between the two motifs and
-    renders it as an actual gapped alignment, rather than just a score.
+    Finds the best alignment between the two motifs (Matrix Align by default,
+    the method of the JASPAR web tool) and renders it as a gapped alignment of
+    the consensus sequences, rather than just a score.
     """
     _require_analysis()
     from pyjaspar.analysis import align_motifs, format_alignment
@@ -325,7 +348,7 @@ def align(
         result = align_motifs(
             motif1,
             motif2,
-            method="pearson",
+            method=method,
             min_overlap=min_overlap,
             both_strands=not no_reverse_complement,
         )
@@ -337,15 +360,19 @@ def align(
         data = {
             "motif1": id1,
             "motif2": id2,
+            "method": result.method,
             "score": round(result.score, 6),
             "offset": result.offset,
+            "overlap": result.overlap,
+            "gaps": result.gaps,
             "is_reverse_complement": result.is_reverse_complement,
         }
         _print_output(data, "json")
     else:
         click.echo(click.style(format_alignment(motif1, motif2, result), fg="green"))
         click.echo(
-            f"score={result.score:.4f} offset={result.offset} "
+            f"method={result.method} score={result.score:.4f} offset={result.offset} "
+            f"overlap={result.overlap} gaps={result.gaps} "
             f"is_reverse_complement={result.is_reverse_complement}"
         )
 
@@ -446,3 +473,167 @@ def enrichment(
         _print_output(data, "json")
     else:
         _print_output(rows, "tsv", _ENRICHMENT_TSV_KEYS)
+
+
+@click.command("search")
+@click.argument("motif_id")
+@click.option(
+    "-r",
+    "--release",
+    default=_LATEST_YEAR,
+    show_default=True,
+    type=click.Choice(_RELEASE_YEARS, case_sensitive=False),
+    help="JASPAR release year",
+)
+@click.option(
+    "-c",
+    "--collection",
+    default="CORE",
+    show_default=True,
+    help="Collection to search",
+)
+@click.option("--tax-group", default=None, help="Taxonomic group to search (e.g. Vertebrates)")
+@click.option(
+    "--all-versions", is_flag=True, default=False, help="Search all versions, not only the latest"
+)
+@_METHOD_OPTION
+@_MIN_OVERLAP_OPTION
+@click.option(
+    "--no-reverse-complement",
+    is_flag=True,
+    default=False,
+    help="Don't try the reverse complement of the profiles",
+)
+@click.option("--top", default=10, show_default=True, type=int, help="Number of hits to show")
+@click.option(
+    "--format",
+    "fmt",
+    default="tsv",
+    show_default=True,
+    type=click.Choice(["json", "tsv"], case_sensitive=False),
+    help="Output format",
+)
+def search(
+    motif_id: str,
+    release: str,
+    collection: str,
+    tax_group: str | None,
+    all_versions: bool,
+    method: str,
+    min_overlap: int | None,
+    no_reverse_complement: bool,
+    top: int,
+    fmt: str,
+) -> None:
+    """Find the JASPAR profiles most similar to a motif.
+
+    Compares MOTIF_ID with every profile of the chosen collection and lists the
+    best matches, like the "Search similar profiles" page of the JASPAR website.
+    """
+    _require_analysis()
+    from pyjaspar.analysis import search_profiles
+
+    jdb = JasparDB(f"JASPAR{release}")
+    query = jdb.fetch_motif_by_id(motif_id)
+    if query is None:
+        click.echo(click.style(f"No motif found with ID: {motif_id}", fg="red"), err=True)
+        sys.exit(1)
+
+    candidates = jdb.fetch_motifs(
+        collection=collection, tax_group=tax_group, all_versions=all_versions
+    )
+    try:
+        hits = search_profiles(
+            query,
+            candidates,
+            method=method,
+            min_overlap=min_overlap,
+            both_strands=not no_reverse_complement,
+            top=top,
+        )
+    except ValueError as e:
+        click.echo(click.style(str(e), fg="red"), err=True)
+        sys.exit(1)
+
+    rows = [
+        {
+            "rank": rank,
+            "matrix_id": hit.matrix_id,
+            "name": hit.name,
+            "score": round(hit.result.score, 4),
+            "percent_score": None if hit.percent_score is None else round(hit.percent_score, 2),
+            "offset": hit.result.offset,
+            "overlap": hit.result.overlap,
+            "gaps": hit.result.gaps,
+            "is_reverse_complement": hit.result.is_reverse_complement,
+        }
+        for rank, hit in enumerate(hits, start=1)
+    ]
+
+    if fmt == "json":
+        data = {"query": motif_id, "method": method, "count": len(rows), "results": rows}
+        _print_output(data, "json")
+    else:
+        _print_output(rows, "tsv", _SEARCH_TSV_KEYS)
+
+
+@click.command("infer")
+@click.argument("sequence")
+@click.option(
+    "-r",
+    "--release",
+    default="2024",
+    show_default=True,
+    help="JASPAR release year to search",
+)
+@click.option(
+    "--format",
+    "fmt",
+    default="tsv",
+    show_default=True,
+    type=click.Choice(["json", "tsv"], case_sensitive=False),
+    help="Output format",
+)
+def infer(sequence: str, release: str, fmt: str) -> None:
+    """Predict which JASPAR profiles a protein binds.
+
+    SEQUENCE is an amino acid sequence or a FASTA file. The search runs on a
+    JASPAR server, so it needs network access and takes several seconds per
+    sequence.
+    """
+    _require_analysis()
+    from dataclasses import asdict
+
+    from pyjaspar.analysis import infer_profiles
+    from pyjaspar.analysis.inference import INFER_HOSTS
+
+    if f"JASPAR{release}" not in INFER_HOSTS:
+        click.echo(
+            click.style(
+                f"Inference is not available for JASPAR{release}; "
+                f"use one of {[r.replace('JASPAR', '') for r in INFER_HOSTS]}",
+                fg="red",
+            ),
+            err=True,
+        )
+        sys.exit(1)
+
+    queries = _read_fasta(sequence) if _is_fasta_file(sequence) else [("input", sequence)]
+
+    rows: list[dict[str, Any]] = []
+    for query_id, protein in queries:
+        click.echo(f"Searching JASPAR{release} for {query_id} ...", err=True)
+        try:
+            hits = infer_profiles(protein, release=f"JASPAR{release}")
+        except ValueError as e:
+            click.echo(click.style(str(e), fg="red"), err=True)
+            sys.exit(1)
+        except OSError as e:
+            click.echo(click.style(f"Could not reach the JASPAR server: {e}", fg="red"), err=True)
+            sys.exit(1)
+        rows.extend({"query": query_id, **asdict(hit)} for hit in hits)
+
+    if fmt == "json":
+        _print_output({"count": len(rows), "results": rows}, "json")
+    else:
+        _print_output(rows, "tsv", _INFER_TSV_KEYS)

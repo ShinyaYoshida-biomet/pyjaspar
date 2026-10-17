@@ -107,17 +107,35 @@ pyjaspar similarity MA0001.1 MA0002.1 --best --format json
 
 ### align
 
-Find the best offset and orientation between two motifs and show the aligned view, rather than just a score.
+Align two motifs and show the aligned view, rather than just a score. The default method is Matrix Align, the method of the JASPAR website; `--method pearson` uses the column-wise Pearson correlation instead.
 
 ```bash
-# Basic alignment
+# Matrix Align (default)
 pyjaspar align MA0001.1 MA0002.1
+
+# Pearson correlation, with at least 5 overlapping columns
+pyjaspar align MA0001.1 MA0002.1 --method pearson --min-overlap 5
 
 # Don't try the reverse complement
 pyjaspar align MA0001.1 MA0002.1 --no-reverse-complement
 
 # JSON output (score/offset/orientation only, not the rendered view)
 pyjaspar align MA0001.1 MA0002.1 --format json
+```
+
+### search
+
+Find the profiles most similar to a motif, like the "Search similar profiles" page of the JASPAR website.
+
+```bash
+# Top 10 CORE profiles (latest versions)
+pyjaspar search MA0139.1
+
+# Vertebrate profiles only, top 5
+pyjaspar search MA0139.1 --tax-group Vertebrates --top 5
+
+# Pearson correlation, all versions, JSON output
+pyjaspar search MA0139.1 --method pearson --all-versions --format json
 ```
 
 ### enrichment
@@ -136,6 +154,30 @@ pyjaspar enrichment \
     -fg fg.fasta -bg bg.fasta \
     --motif-ids MA0001.1 \
     --format json
+```
+
+### infer
+
+Predict which JASPAR profiles a protein binds from its amino acid sequence. The search runs on a JASPAR server (2020, 2022 or 2024 release), so it needs network access.
+
+```bash
+pyjaspar infer MSNEQTVLSSLIRDEDGNPAAPRK...
+
+# FASTA file of proteins
+pyjaspar infer proteins.fasta --format json
+```
+
+## Visualization commands
+
+Requires `pip install pyjaspar[viz]`.
+
+### logo
+
+Draw the sequence logo of a motif to an image file; the format follows the extension.
+
+```bash
+pyjaspar logo MA0139.1 -o ctcf.png
+pyjaspar logo MA0139.1 -o ctcf.svg
 ```
 
 ## Deep Learning (DL) commands
