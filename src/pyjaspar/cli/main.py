@@ -30,7 +30,11 @@ click.rich_click.COMMAND_GROUPS = {
         },
         {
             "name": "Analysis commands",
-            "commands": ["scan", "similarity", "align", "enrichment"],
+            "commands": ["scan", "similarity", "align", "search", "enrichment", "infer"],
+        },
+        {
+            "name": "Visualization commands",
+            "commands": ["logo"],
         },
         {
             "name": "Deep Learning (DL) collection",
@@ -384,13 +388,17 @@ def cite() -> None:
     )
 
 
-from .analysis import align, enrichment, scan, similarity  # noqa: E402
+from .analysis import align, enrichment, infer, scan, search, similarity  # noqa: E402
 from .dl import dl_group  # noqa: E402
+from .viz import logo  # noqa: E402
 
-#cli.add_command(scan)
-#cli.add_command(similarity)
-#cli.add_command(align)
-#cli.add_command(enrichment)
+cli.add_command(scan)
+cli.add_command(similarity)
+cli.add_command(align)
+cli.add_command(search)
+cli.add_command(enrichment)
+cli.add_command(infer)
+cli.add_command(logo)
 
 cli.add_command(dl_group)
 
